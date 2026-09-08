@@ -1,0 +1,15 @@
+[Unit]
+Description=Cepantezca - Virtual Second Display Server
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/Documentos/BaXoMs-Workflow/Cepantezca/host
+ExecStart=%h/Documentos/BaXoMs-Workflow/Cepantezca/host/run.sh
+ExecStop=%h/Documentos/BaXoMs-Workflow/Cepantezca/host/teardown_virtual_display.sh
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=graphical-session.target

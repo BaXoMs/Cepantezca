@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#0b0b0f">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="./manifest.json">
+  <link rel="icon" type="image/svg+xml" href="./icons/icon-192.svg">
+  <title>Cepantezca - Monitor Virtual</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    html, body {
+      width: 100%; height: 100%; overflow: hidden;
+      background-color: #0b0b0f; color: #fff;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      touch-action: none; user-select: none;
+    }
+
+    /* Pantalla de configuración inicial */
+    #setup-view {
+      position: fixed; inset: 0; z-index: 100;
+      background-color: #0b0b0f;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      padding: 24px;
+    }
+    .setup-card {
+      background: #17171f;
+      border: 1px solid #2a2a35;
+      border-radius: 16px;
+      padding: 24px;
+      width: 100%; max-width: 400px;
+      display: flex; flex-direction: column; gap: 14px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    }
+    .setup-header {
+      display: flex; align-items: center; gap: 12px; margin-bottom: 4px;
+    }
+    .setup-logo {
+      width: 36px; height: 36px; border-radius: 8px;
+    }
+    .setup-title {
+      font-size: 22px; font-weight: 700; color: #fff;
+    }
+    .setup-desc {
+      font-size: 13px; color: #999; line-height: 1.4;
+    }
+    .input-group {
+      display: flex; flex-direction: column; gap: 6px;
+    }
+    .input-label {
+      font-size: 12px; font-weight: 600; color: #aaa; text-transform: uppercase; letter-spacing: 0.5px;
+    }
+    input[type="text"], input[type="number"] {
+      background: #0b0b0f; border: 1px solid #2a2a35;
+      color: #fff; border-radius: 8px; padding: 12px; font-size: 15px; outline: none;
+      transition: border-color 0.2s;
+    }
+    input[type="text"]:focus, input[type="number"]:focus {
+      border-color: #4a90d9;
+    }
+    .toggle-row {
+      display: flex; gap: 8px;
+    }
+    .toggle-btn {
+      flex: 1; padding: 10px; background: #0b0b0f; border: 1px solid #2a2a35;
+      color: #aaa; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; gap: 6px;
+    }
+    .toggle-btn.active {
+      background: #1a2a3a; border-color: #4a90d9; color: #fff;
+    }
+    .btn-primary {
+      background: #4a90d9; color: #fff; border: none; border-radius: 8px;
+      padding: 13px; font-size: 16px; font-weight: 700; cursor: pointer;
+      transition: opacity 0.2s, transform 0.1s;
+    }
+    .btn-primary:active { opacity: 0.85; transform: scale(0.98); }
+
+    /* Pantalla de Stream */
+    #session-view {
+      position: fixed; inset: 0; z-index: 10;
+      background: #000; display: none;
+    }
+    #screen-canvas {
+      width: 100%; height: 100%; object-fit: contain; display: block;
+      cursor: crosshair;
+    }
+
+    /* Pill de estado */
+    .status-pill {
+      position: absolute; top: 16px; left: 16px; z-index: 30;
+      background: rgba(0,0,0,0.6); backdrop-filter: blur(8px);
+      border: 1px solid rgba(255,255,255,0.1);
+      padding: 6px 12px; border-radius: 20px;
+      display: flex; align-items: center; gap: 8px;
+      font-size: 12px; font-weight: 500; color: #fff;
+      pointer-events: auto; cursor: pointer;
+      transition: opacity 0.3s;
+    }
+    .status-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: #e0a95a;
+    }
+    .status-dot.connected { background: #4caf50; }
+    .status-dot.error { background: #e05a5a; }
+
+    /* Barra de herramientas flotante */
+    .floating-toolbar {
+      position: absolute; top: 16px; right: 16px; z-index: 30;
+      display: flex; gap: 8px; align-items: center;
+      transition: opacity 0.3s;
+    }
+    .tool-btn {
+      width: 40px; height: 40px; border-radius: 20px;
+      background: rgba(0,0,0,0.6); backdrop-filter: blur(8px);
+      border: 1px solid rgba(255,255,255,0.1);
+      color: #fff; font-size: 16px;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+    }
+    .tool-btn:active { background: rgba(74, 144, 217, 0.4); }
+
+    /* Modal emergente para Ajustes y Teclado */
+    .overlay-modal {
+      position: fixed; inset: 0; z-index: 50;
+      background: rgba(0,0,0,0.7); backdrop-filter: blur(4px);
+      display: none; align-items: center; justify-content: center; padding: 20px;
+    }
+    .modal-content {
+      background: #17171f; border: 1px solid #2a2a35; border-radius: 16px;
+      padding: 20px; width: 100%; max-width: 380px; display: flex; flex-direction: column; gap: 14px;
+    }
+    .modal-title { font-size: 18px; font-weight: 700; color: #fff; display: flex; justify-content: space-between; align-items: center; }
+    .modal-close { background: none; border: none; color: #999; font-size: 20px; cursor: pointer; }
+    .keyboard-row { display: flex; gap: 6px; flex-wrap: wrap; }
+    .key-btn {
+      background: #0b0b0f; border: 1px solid #2a2a35; border-radius: 6px;
+      color: #ddd; padding: 8px 12px; font-size: 13px; font-weight: 600; cursor: pointer;
+    }
+    .key-btn:active { background: #4a90d9; color: #fff; }
+  </style>
+</head>
+<body>
+
+  <!-- Vista Inicial de Conexión -->
+  <div id="setup-view">
+    <div class="setup-card">
+      <div class="setup-header">
+        <img class="setup-logo" src="./icons/icon-192.svg" alt="Cepantezca">
+        <div>
+          <h1 class="setup-title">Cepantezca</h1>
+          <p class="setup-desc">Monitor secundario virtual para Linux</p>
+        </div>
+      </div>
+
+      <div class="toggle-row">
+        <button id="btn-wifi" class="toggle-btn active" onclick="setMode('wifi')">📶 WiFi</button>
+        <button id="btn-usb" class="toggle-btn" onclick="setMode('usb')">🔌 USB</button>
+      </div>
+
+      <div class="input-group" id="ip-group">
+        <label class="input-label">Dirección IP</label>
+        <input type="text" id="host-input" placeholder="ej: 192.168.1.100" value="">
+      </div>
+
+      <div class="input-group">
+        <label class="input-label">Puerto</label>
+        <input type="number" id="port-input" placeholder="8765" value="8765">
+      </div>
+
+      <button class="btn-primary" onclick="startSession()">Conectar Pantalla</button>
+    </div>
+  </div>
+
+  <!-- Vista de Sesión / Stream -->
+  <div id="session-view">
+    <canvas id="screen-canvas"></canvas>
+
+    <div id="status-pill" class="status-pill" onclick="toggleSettingsModal()">
+      <div id="status-dot" class="status-dot"></div>
+      <span id="status-text">Conectando...</span>
+    </div>
+
+    <div id="floating-toolbar" class="floating-toolbar">
+      <button class="tool-btn" onclick="toggleKeyboardModal()" title="Teclado">⌨️</button>
+      <button class="tool-btn" onclick="toggleSettingsModal()" title="Ajustes">⚙️</button>
+      <button class="tool-btn" onclick="toggleFullscreen()" title="Pantalla completa">⛶</button>
+      <button class="tool-btn" onclick="exitSession()" title="Desconectar" style="color: #e05a5a;">✕</button>
+    </div>
+  </div>
+
+  <!-- Modal de Teclado / Texto -->
+  <div id="keyboard-modal" class="overlay-modal">
+    <div class="modal-content">
+      <div class="modal-title">
+        <span>Enviar texto y teclas</span>
+        <button class="modal-close" onclick="toggleKeyboardModal()">✕</button>
+      </div>
+      <input type="text" id="text-to-send" placeholder="Escribe aquí para enviar al host..." onkeydown="if(event.key==='Enter') sendTypedText()">
+      <button class="btn-primary" onclick="sendTypedText()">Enviar Texto</button>
+
+      <div class="keyboard-row">
+        <button class="key-btn" onclick="sendKey('Return')">Enter</button>
+        <button class="key-btn" onclick="sendKey('BackSpace')">Borrar</button>
+        <button class="key-btn" onclick="sendKey('Tab')">Tab</button>
+        <button class="key-btn" onclick="sendKey('Escape')">Esc</button>
+        <button class="key-btn" onclick="sendKey('ctrl+c')">Ctrl+C</button>
+        <button class="key-btn" onclick="sendKey('ctrl+v')">Ctrl+V</button>
+        <button class="key-btn" onclick="sendKey('Super_L')">Super (Win)</button>
+        <button class="key-btn" onclick="sendKey('Alt+Tab')">Alt+Tab</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal de Ajustes Rápidos -->
+  <div id="settings-modal" class="overlay-modal">
+    <div class="modal-content">
+      <div class="modal-title">
+        <span>Ajustes de Stream</span>
+        <button class="modal-close" onclick="toggleSettingsModal()">✕</button>
+      </div>
+      <div class="input-group">
+        <label class="input-label">Calidad JPEG: <span id="quality-val">70%</span></label>
+        <input type="range" id="quality-range" min="30" max="95" value="70" oninput="updateQuality(this.value)">
+      </div>
+      <div class="input-group">
+        <label class="input-label">FPS Objetivo: <span id="fps-val">30</span></label>
+        <input type="range" id="fps-range" min="15" max="60" step="5" value="30" oninput="updateFPS(this.value)">
+      </div>
+      <button class="btn-primary" onclick="toggleSettingsModal()">Listo</button>
+    </div>
+  </div>
+
+  <script>
+    // Inicialización de PWA Service Worker
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./sw.js').catch(console.warn);
+    }
+
+    let mode = 'wifi';
+    let wsStream = null;
+    let wsInput = null;
+    let currentHost = '';
+    let currentPort = '8765';
+    let reconnectAttempts = 0;
+    let reconnectTimer = null;
+    let isConnected = false;
+
+    let targetFps = 30;
+    let targetQuality = 70;
+
+    const canvas = document.getElementById('screen-canvas');
+    const ctx = canvas.getContext('2d');
+    const statusDot = document.getElementById('status-dot');
+    const statusText = document.getElementById('status-text');
+    const hostInput = document.getElementById('host-input');
+    const portInput = document.getElementById('port-input');
+
+    // Autocompletar con host actual
+    const defaultHost = window.location.hostname && window.location.hostname !== 'localhost' ? window.location.hostname : 'localhost';
+    const defaultPort = window.location.port || '8765';
+    hostInput.value = localStorage.getItem('cepantezca_host') || (defaultHost !== 'localhost' ? defaultHost : '');
+    portInput.value = localStorage.getItem('cepantezca_port') || defaultPort;
+
+    function setMode(m) {
+      mode = m;
+      document.getElementById('btn-wifi').classList.toggle('active', m === 'wifi');
+      document.getElementById('btn-usb').classList.toggle('active', m === 'usb');
+      document.getElementById('ip-group').style.display = m === 'usb' ? 'none' : 'flex';
+      if (m === 'usb') hostInput.value = 'localhost';
+    }
+
+    function startSession() {
+      currentHost = mode === 'usb' ? 'localhost' : (hostInput.value.trim() || 'localhost');
+      currentPort = portInput.value.trim() || '8765';
+
+      localStorage.setItem('cepantezca_host', currentHost);
+      localStorage.setItem('cepantezca_port', currentPort);
+
+      document.getElementById('setup-view').style.display = 'none';
+      document.getElementById('session-view').style.display = 'block';
+
+      connectWebSockets();
+      setupGestures();
+    }
+
+    function exitSession() {
+      clearTimeout(reconnectTimer);
+      if (wsStream) wsStream.close();
+      if (wsInput) wsInput.close();
+      document.getElementById('session-view').style.display = 'none';
+      document.getElementById('setup-view').style.display = 'flex';
+    }
+
+    function connectWebSockets() {
+      clearTimeout(reconnectTimer);
+      const base = `ws://${currentHost}:${currentPort}`;
+
+      updateStatus('connecting', `Conectando a ${currentHost}...`);
+
+      try {
+        wsStream = new WebSocket(`${base}/stream`);
+        wsStream.binaryType = 'blob';
+
+        wsStream.onopen = () => {
+          reconnectAttempts = 0;
+          isConnected = true;
+          updateStatus('connected', `${currentHost}:${currentPort}`);
+        };
+
+        wsStream.onmessage = (event) => {
+          const img = new Image();
+          img.onload = () => {
+            if (canvas.width !== img.width || canvas.height !== img.height) {
+              canvas.width = img.width;
+              canvas.height = img.height;
+            }
+            ctx.drawImage(img, 0, 0);
+            URL.revokeObjectURL(img.src);
+          };
+          img.src = URL.createObjectURL(event.data);
+        };
+
+        wsStream.onclose = () => handleDisconnect();
+        wsStream.onerror = () => handleDisconnect();
+
+        wsInput = new WebSocket(`${base}/input`);
+      } catch (err) {
+        handleDisconnect();
+      }
+    }
+
+    function handleDisconnect() {
+      isConnected = false;
+      if (document.getElementById('session-view').style.display !== 'block') return;
+
+      reconnectAttempts++;
+      const delay = Math.min(10, Math.pow(1.5, reconnectAttempts));
+      updateStatus('error', `Reconectando en ${Math.round(delay)}s...`);
+
+      clearTimeout(reconnectTimer);
+      reconnectTimer = setTimeout(() => {
+        connectWebSockets();
+      }, delay * 1000);
+    }
+
+    function updateStatus(state, msg) {
+      statusDot.className = `status-dot ${state === 'connected' ? 'connected' : state === 'error' ? 'error' : ''}`;
+      statusText.textContent = msg;
+    }
+
+    function sendInput(payload) {
+      if (wsInput && wsInput.readyState === WebSocket.OPEN) {
+        wsInput.send(JSON.stringify(payload));
+      }
+    }
+
+    function normCoords(clientX, clientY) {
+      const rect = canvas.getBoundingClientRect();
+      const x = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+      const y = Math.min(1, Math.max(0, (clientY - rect.top) / rect.height));
+      return { x, y };
+    }
+
+    // Gestos táctiles y ratón
+    function setupGestures() {
+      let touchStartTime = 0;
+      let longPressTimer = null;
+      let lastTouchDist = 0;
+      let lastTwoTouchY = 0;
+
+      canvas.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        touchStartTime = Date.now();
+
+        if (e.touches.length === 1) {
+          const t = e.touches[0];
+          const { x, y } = normCoords(t.clientX, t.clientY);
+          sendInput({ type: 'down', x, y, button: 1 });
+
+          longPressTimer = setTimeout(() => {
+            // Clic derecho tras mantener presionado 450ms
+            sendInput({ type: 'up', x, y, button: 1 });
+            sendInput({ type: 'click', x, y, button: 3 });
+          }, 450);
+        } else if (e.touches.length === 2) {
+          clearTimeout(longPressTimer);
+          lastTwoTouchY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+        }
+      }, { passive: false });
+
+      canvas.addEventListener('touchmove', (e) => {
+        e.preventDefault();
+        clearTimeout(longPressTimer);
+
+        if (e.touches.length === 1) {
+          const t = e.touches[0];
+          const { x, y } = normCoords(t.clientX, t.clientY);
+          sendInput({ type: 'move', x, y });
+        } else if (e.touches.length === 2) {
+          const currentTwoTouchY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+          const dy = (lastTwoTouchY - currentTwoTouchY) * 2;
+          sendInput({ type: 'scroll', dx: 0, dy: dy });
+          lastTwoTouchY = currentTwoTouchY;
+        }
+      }, { passive: false });
+
+      canvas.addEventListener('touchend', (e) => {
+        e.preventDefault();
+        clearTimeout(longPressTimer);
+        if (e.changedTouches.length > 0) {
+          const t = e.changedTouches[0];
+          const { x, y } = normCoords(t.clientX, t.clientY);
+          sendInput({ type: 'up', x, y, button: 1 });
+        }
+      }, { passive: false });
+
+      // Soporte para ratón en desktop
+      canvas.addEventListener('mousedown', (e) => {
+        const { x, y } = normCoords(e.clientX, e.clientY);
+        sendInput({ type: 'down', x, y, button: e.button === 2 ? 3 : 1 });
+      });
+      canvas.addEventListener('mousemove', (e) => {
+        const { x, y } = normCoords(e.clientX, e.clientY);
+        sendInput({ type: 'move', x, y });
+      });
+      canvas.addEventListener('mouseup', (e) => {
+        const { x, y } = normCoords(e.clientX, e.clientY);
+        sendInput({ type: 'up', x, y, button: e.button === 2 ? 3 : 1 });
+      });
+      canvas.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        sendInput({ type: 'scroll', dx: e.deltaX, dy: e.deltaY });
+      }, { passive: false });
+      canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+    }
+
+    // Modal de Teclado
+    function toggleKeyboardModal() {
+      const el = document.getElementById('keyboard-modal');
+      el.style.display = el.style.display === 'flex' ? 'none' : 'flex';
+      if (el.style.display === 'flex') {
+        setTimeout(() => document.getElementById('text-to-send').focus(), 100);
+      }
+    }
+
+    function sendTypedText() {
+      const input = document.getElementById('text-to-send');
+      const text = input.value;
+      if (text) {
+        sendInput({ type: 'text', text: text });
+        input.value = '';
+      }
+    }
+
+    function sendKey(keysym) {
+      sendInput({ type: 'key', keysym: keysym });
+    }
+
+    // Modal de Ajustes
+    function toggleSettingsModal() {
+      const el = document.getElementById('settings-modal');
+      el.style.display = el.style.display === 'flex' ? 'none' : 'flex';
+    }
+
+    function updateQuality(val) {
+      targetQuality = parseInt(val);
+      document.getElementById('quality-val').textContent = `${val}%`;
+      sendInput({ type: 'config', quality: targetQuality, fps: targetFps });
+    }
+
+    function updateFPS(val) {
+      targetFps = parseInt(val);
+      document.getElementById('fps-val').textContent = `${val}`;
+      sendInput({ type: 'config', quality: targetQuality, fps: targetFps });
+    }
+
+    function toggleFullscreen() {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(console.warn);
+      } else {
+        document.exitFullscreen().catch(console.warn);
+      }
+    }
+  </script>
+</body>
+</html>

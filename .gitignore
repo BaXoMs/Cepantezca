@@ -1,0 +1,21 @@
+# Python
+host/venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# Node / React Native / Expo
+mobile/node_modules/
+mobile/.expo/
+mobile/dist/
+mobile/npm-debug.log*
+mobile/yarn-debug.log*
+mobile/yarn-error.log*
+
+# OS & Temp
+.DS_Store
+*.swp
+*.swo
+/tmp/cepantezca_*

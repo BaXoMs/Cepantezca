@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Cepantezca
+Comment=Usa tu tablet como segundo monitor para Linux
+Exec=bash -c "cd $(dirname %k) && ./run.sh"
+Terminal=true
+Icon=video-display
+Categories=Utility;System;
+Keywords=monitor;display;virtual;tablet;screen;

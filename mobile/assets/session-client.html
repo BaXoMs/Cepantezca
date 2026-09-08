@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { margin: 0; padding: 0; overflow: hidden; background: #000; height: 100%; width: 100%; touch-action: none; user-select: none; }
+  #screen { width: 100%; height: 100%; object-fit: contain; display: block; }
+  #status {
+    position: fixed; top: 6px; left: 6px;
+    color: #4caf50; font-family: monospace; font-size: 10px; opacity: 0.55;
+    pointer-events: none;
+  }
+</style>
+</head>
+<body>
+<canvas id="screen"></canvas>
+<div id="status">conectando...</div>
+
+<script>
+  // Host y puerto llegan inyectados por React Native
+  const HOST = window.__LINKDESK_HOST__ || "localhost";
+  const PORT = window.__LINKDESK_PORT__ || "8765";
+  const BASE = "ws://" + HOST + ":" + PORT;
+
+  const canvas = document.getElementById("screen");
+  const ctx = canvas.getContext("2d");
+  const statusEl = document.getElementById("status");
+
+  let ws = null;
+  let wsInput = null;
+  let reconnectTimer = null;
+  let reconnectCount = 0;
+
+  function post(msg) {
+    if (window.ReactNativeWebView) {
+      window.ReactNativeWebView.postMessage(JSON.stringify(msg));
+    }
+  }
+
+  function connect() {
+    clearTimeout(reconnectTimer);
+    try {
+      ws = new WebSocket(BASE + "/stream");
+      ws.binaryType = "blob";
+
+      ws.onopen = () => {
+        reconnectCount = 0;
+        statusEl.textContent = "stream: ok";
+        post({ type: "stream_status", value: "connected" });
+      };
+
+      ws.onclose = () => {
+        statusEl.textContent = "stream: reconectando...";
+        post({ type: "stream_status", value: "reconnecting" });
+        scheduleReconnect();
+      };
+
+      ws.onerror = () => {
+        statusEl.textContent = "stream: error";
+        post({ type: "stream_status", value: "error" });
+        scheduleReconnect();
+      };
+
+      ws.onmessage = (event) => {
+        const img = new Image();
+        img.onload = () => {
+          if (canvas.width !== img.width || canvas.height !== img.height) {
+            canvas.width = img.width;
+            canvas.height = img.height;
+          }
+          ctx.drawImage(img, 0, 0);
+          URL.revokeObjectURL(img.src);
+        };
+        img.src = URL.createObjectURL(event.data);
+      };
+
+      wsInput = new WebSocket(BASE + "/input");
+      wsInput.onopen = () => post({ type: "input_status", value: "connected" });
+
+    } catch (err) {
+      scheduleReconnect();
+    }
+  }
+
+  function scheduleReconnect() {
+    clearTimeout(reconnectTimer);
+    reconnectCount++;
+    const delay = Math.min(8, Math.pow(1.4, reconnectCount));
+    reconnectTimer = setTimeout(connect, delay * 1000);
+  }
+
+  function normCoords(clientX, clientY) {
+    const rect = canvas.getBoundingClientRect();
+    const x = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+    const y = Math.min(1, Math.max(0, (clientY - rect.top) / rect.height));
+    return { x, y };
+  }
+
+  function sendInput(payload) {
+    if (wsInput && wsInput.readyState === WebSocket.OPEN) {
+      wsInput.send(JSON.stringify(payload));
+    }
+  }
+
+  // Escuchar mensajes desde React Native (para enviar texto, teclas o cambios de config)
+  window.addEventListener("message", (event) => {
+    try {
+      const data = typeof event.data === "string" ? JSON.parse(event.data) : event.data;
+      if (data && data.action === "sendInput") {
+        sendInput(data.payload);
+      }
+    } catch (e) {}
+  });
+  document.addEventListener("message", (event) => {
+    try {
+      const data = typeof event.data === "string" ? JSON.parse(event.data) : event.data;
+      if (data && data.action === "sendInput") {
+        sendInput(data.payload);
+      }
+    } catch (e) {}
+  });
+
+  // Gestos táctiles
+  let longPressTimer = null;
+  let lastTwoY = 0;
+
+  canvas.addEventListener("touchstart", (e) => {
+    e.preventDefault();
+    if (e.touches.length === 1) {
+      const t = e.touches[0];
+      const { x, y } = normCoords(t.clientX, t.clientY);
+      sendInput({ type: "down", x, y, button: 1 });
+
+      longPressTimer = setTimeout(() => {
+        sendInput({ type: "up", x, y, button: 1 });
+        sendInput({ type: "click", x, y, button: 3 });
+      }, 450);
+    } else if (e.touches.length === 2) {
+      clearTimeout(longPressTimer);
+      lastTwoY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+    }
+  }, { passive: false });
+
+  canvas.addEventListener("touchmove", (e) => {
+    e.preventDefault();
+    clearTimeout(longPressTimer);
+    if (e.touches.length === 1) {
+      const t = e.touches[0];
+      const { x, y } = normCoords(t.clientX, t.clientY);
+      sendInput({ type: "move", x, y });
+    } else if (e.touches.length === 2) {
+      const currentY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+      const dy = (lastTwoY - currentY) * 2;
+      sendInput({ type: "scroll", dx: 0, dy: dy });
+      lastTwoY = currentY;
+    }
+  }, { passive: false });
+
+  canvas.addEventListener("touchend", (e) => {
+    e.preventDefault();
+    clearTimeout(longPressTimer);
+    if (e.changedTouches.length > 0) {
+      const t = e.changedTouches[0];
+      const { x, y } = normCoords(t.clientX, t.clientY);
+      sendInput({ type: "up", x, y, button: 1 });
+    }
+  }, { passive: false });
+
+  connect();
+</script>
+</body>
+</html>
